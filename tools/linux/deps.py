@@ -16,6 +16,7 @@ def install_deps():
               "build-essential",
               "ca-certificates",
               "cmake",
+              "perl",
               "curl",
               "git",
               "glib-2.0-dev",
@@ -43,7 +44,8 @@ def install_deps():
               "libncurses6",
               "curl",
               "libxkbcommon-dev",
-              "libxkbcommon-x11-dev"]
+              "libxkbcommon-x11-dev",
+              "libnotify-dev"]
 
   for package in packages:
     base.cmd("sudo", ["apt-get", "install", "-y", package], True)
@@ -67,7 +69,7 @@ def install_deps():
     print("OK")
     base.cmd("sudo", ["apt-get", "-y", "install", "npm", "yarn"], True)
   base.cmd("sudo", ["npm", "install", "-g", "grunt-cli"])
-  base.cmd("sudo", ["npm", "install", "-g", "@yao-pkg/pkg"])
+  base.cmd("sudo", ["npm", "install", "-g", "@yao-pkg/pkg@6.11.0"])
 
   # java
   java_error = base.cmd("sudo", ["apt-get", "-y", "install", "openjdk-11-jdk"], True)

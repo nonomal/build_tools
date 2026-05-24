@@ -6,6 +6,7 @@ import base
 import os
 import subprocess
 import deps
+import qt_binary_build
 
 def get_branch_name(directory):
   cur_dir = os.getcwd()
@@ -17,61 +18,18 @@ def get_branch_name(directory):
   os.chdir(cur_dir)
   return current_branch
 
-def install_qt():
-  # qt
-  if not base.is_file("./qt_source_5.9.9.tar.xz"):
-    base.download("https://download.qt.io/new_archive/qt/5.9/5.9.9/single/qt-everywhere-opensource-src-5.9.9.tar.xz", "./qt_source_5.9.9.tar.xz")
+if not base.is_dir("./python3"):
+  base.cmd("./python.sh")
 
-  if not base.is_dir("./qt-everywhere-opensource-src-5.9.9"):
-    base.cmd("tar", ["-xf", "./qt_source_5.9.9.tar.xz"])
-
-  qt_params = ["-opensource",
-               "-confirm-license",
-               "-release",
-               "-shared",
-               "-accessibility",
-               "-prefix",
-               "./../qt_build/Qt-5.9.9/gcc_64",
-               "-qt-zlib",
-               "-qt-libpng",
-               "-qt-libjpeg",
-               "-qt-xcb",
-               "-qt-pcre",
-               "-no-sql-sqlite",
-               "-no-qml-debug",
-               "-gstreamer", "1.0",
-               "-nomake", "examples",
-               "-nomake", "tests",
-               "-skip", "qtenginio",
-               "-skip", "qtlocation",
-               "-skip", "qtserialport",
-               "-skip", "qtsensors",
-               "-skip", "qtxmlpatterns",
-               "-skip", "qt3d",
-               "-skip", "qtwebview",
-               "-skip", "qtwebengine"]
-
-  base.cmd_in_dir("./qt-everywhere-opensource-src-5.9.9", "./configure", qt_params)
-  base.cmd_in_dir("./qt-everywhere-opensource-src-5.9.9", "make", ["-j", "4"])
-  base.cmd_in_dir("./qt-everywhere-opensource-src-5.9.9", "make", ["install"])
-  return
-  
-def install_qt_prebuild():
-  url_amd64 = "https://s3.eu-west-1.amazonaws.com/static-doc.teamlab.eu.com/qt/5.9.9/linux_amd64/qt_binary.7z"
-  base.download(url_amd64, "./qt_amd64.7z")
-  base.extract("./qt_amd64.7z", "./qt_build")
-  base.create_dir("./qt_build/Qt-5.9.9")
-  base.cmd("mv", ["./qt_build/qt_amd64", "./qt_build/Qt-5.9.9/gcc_64"])
-  base.setup_local_qmake("./qt_build/Qt-5.9.9/gcc_64/bin")
-  return
-
-if not base.is_file("./node_js_setup_14.x"):
-  print("install dependencies...")
-  deps.install_deps()
+if not base.is_file("./packages_complete"):
+  base.cmd("./python3/bin/python3", ["./deps.py"])
+  base.cmd("sudo", ["./cmake.sh"])
 
 if not base.is_dir("./qt_build"):
-  print("install qt...")
-  install_qt_prebuild()
+  base.cmd("./python3/bin/python3", ["./qt_binary_fetch.py", "all"])
+
+if not base.is_dir("./sysroot/ubuntu16-amd64-sysroot"):
+  base.cmd_in_dir("./sysroot", "./../python3/bin/python3", ["./fetch.py", "all"])
 
 branch = get_branch_name("../..")
 
@@ -106,9 +64,10 @@ print("build modules: " + modules)
 print("---------------------------------------------")
 
 build_tools_params = ["--branch", branch, 
-                      "--module", modules, 
+                      "--module", modules,
+                      "--sysroot", "1",
                       "--update", "1",
                       "--qt-dir", os.getcwd() + "/qt_build/Qt-5.9.9"] + params
 
-base.cmd_in_dir("../..", "./configure.py", build_tools_params)
-base.cmd_in_dir("../..", "./make.py")
+base.cmd_in_dir("../..", "./tools/linux/python3/bin/python", ["./configure.py"] + build_tools_params)
+base.cmd_in_dir("../..", "./tools/linux/python3/bin/python", ["./make.py"])

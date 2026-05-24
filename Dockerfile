@@ -1,13 +1,15 @@
-FROM ubuntu:20.04
+FROM ubuntu:24.04
 
 ENV TZ=Etc/UTC
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 RUN apt-get -y update && \
-    apt-get -y install python \
+    apt-get -y install sudo \
                        python3 \
-                       sudo
-RUN rm /usr/bin/python && ln -s /usr/bin/python2 /usr/bin/python
+                       tar \
+                       wget \
+                       curl
+
 ADD . /build_tools
 WORKDIR /build_tools
 

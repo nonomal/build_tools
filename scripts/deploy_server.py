@@ -41,6 +41,7 @@ def make():
 
     build_server_dir = root_dir + '/server'
     server_dir = base.get_script_dir() + "/../../server"
+    server_admin_panel_dir = base.get_script_dir() + "/../../server-admin-panel"
 
     base.create_dir(build_server_dir + '/DocService')
 
@@ -57,6 +58,15 @@ def make():
     base.copy_dir(server_dir + '/Metrics/config', build_server_dir + '/Metrics/config')
     base.create_dir(build_server_dir + '/Metrics/node_modules/modern-syslog/build/Release')
     base.copy_file(server_dir + "/Metrics/node_modules/modern-syslog/build/Release/core.node", build_server_dir + "/Metrics/node_modules/modern-syslog/build/Release/core.node")
+
+    if "server-admin-panel" in base.get_server_addons() and base.is_exist(server_admin_panel_dir):
+      # AdminPanel server part
+      base.create_dir(build_server_dir + '/AdminPanel/server')
+      base.copy_exe(server_admin_panel_dir + "/server", build_server_dir + '/AdminPanel/server', "adminpanel")
+
+      # AdminPanel client part
+      base.create_dir(build_server_dir + '/AdminPanel/client/build')
+      base.copy_dir(server_admin_panel_dir + '/client/build', build_server_dir + '/AdminPanel/client/build')
 
     qt_dir = base.qt_setup(native_platform)
     platform = native_platform
@@ -85,6 +95,8 @@ def make():
     base.copy_lib(core_build_dir + "/lib/" + platform_postfix, converter_dir, "IWorkFile")
     base.copy_lib(core_build_dir + "/lib/" + platform_postfix, converter_dir, "HWPFile")
     base.copy_lib(core_build_dir + "/lib/" + platform_postfix, converter_dir, "DocxRenderer")
+    base.copy_lib(core_build_dir + "/lib/" + platform_postfix, converter_dir, "StarMathConverter")
+    base.copy_lib(core_build_dir + "/lib/" + platform_postfix, converter_dir, "ooxmlsignature")
     base.copy_file(git_dir + "/sdkjs/pdf/src/engine/cmap.bin", converter_dir + "/cmap.bin")
     base.copy_exe(core_build_dir + "/bin/" + platform_postfix, converter_dir, "x2t")
 
@@ -94,23 +106,17 @@ def make():
     base.generate_doctrenderer_config(converter_dir + "/DoctRenderer.config", "../../../", "server", "", "../../../dictionaries")
 
     # icu
-    if (0 == platform.find("win")):
-      base.copy_file(core_dir + "/Common/3dParty/icu/" + platform + "/build/icudt58.dll", converter_dir + "/icudt58.dll")
-      base.copy_file(core_dir + "/Common/3dParty/icu/" + platform + "/build/icuuc58.dll", converter_dir + "/icuuc58.dll")
+    base.deploy_icu(core_dir, converter_dir, platform)
 
-    if (0 == platform.find("linux")):
-      base.copy_file(core_dir + "/Common/3dParty/icu/" + platform + "/build/libicudata.so.58", converter_dir + "/libicudata.so.58")
-      base.copy_file(core_dir + "/Common/3dParty/icu/" + platform + "/build/libicuuc.so.58", converter_dir + "/libicuuc.so.58")
-
-    if (0 == platform.find("mac")):
-      base.copy_file(core_dir + "/Common/3dParty/icu/" + platform + "/build/libicudata.58.dylib", converter_dir + "/libicudata.58.dylib")
-      base.copy_file(core_dir + "/Common/3dParty/icu/" + platform + "/build/libicuuc.58.dylib", converter_dir + "/libicuuc.58.dylib")
-    
     base.copy_v8_files(core_dir, converter_dir, platform)
 
     # builder
     base.copy_exe(core_build_dir + "/bin/" + platform_postfix, converter_dir, "docbuilder")
     base.copy_dir(git_dir + "/document-templates/new/en-US", converter_dir + "/empty")
+
+    # correct mac frameworks
+    if (0 == platform.find("mac")):
+      base.for_each_framework(converter_dir, "mac", callbacks=[base.generate_plist], max_depth=1)
 
     # js
     js_dir = root_dir
@@ -124,7 +130,7 @@ def make():
 
     # add embed worker code
     base.cmd_in_dir(git_dir + "/sdkjs/common/embed", "python", ["make.py", js_dir + "/web-apps/apps/api/documents/api.js"])
-    
+
     # plugins
     base.create_dir(js_dir + "/sdkjs-plugins")
     base.copy_marketplace_plugin(js_dir + "/sdkjs-plugins", False, True)
@@ -146,7 +152,7 @@ def make():
     base.copy_exe(core_build_dir + "/bin/" + platform_postfix, tools_dir, "allthemesgen")
     if ("1" != config.option("preinstalled-plugins")):
       base.copy_exe(core_build_dir + "/bin/" + platform_postfix, tools_dir, "pluginsmanager")
-    
+
     branding_dir = server_dir + "/branding"
     if("" != config.option("branding") and "onlyoffice" != config.option("branding")):
       branding_dir = git_dir + '/' + config.option("branding") + '/server'
@@ -176,6 +182,12 @@ def make():
     document_templates = build_server_dir + '/../document-templates'
     base.copy_dir(document_templates_files + '/new', document_templates + '/new')
     base.copy_dir(document_templates_files + '/sample', document_templates + '/sample')
+
+    #document-formats
+    document_formats_files = server_dir + '/../document-formats'
+    document_formats = build_server_dir + '/../document-formats'
+    base.create_dir(document_formats)
+    base.copy_file(document_formats_files + '/onlyoffice-docs-formats.json', document_formats + '/onlyoffice-docs-formats.json')
 
     #license
     license_file1 = server_dir + '/LICENSE.txt'
@@ -228,4 +240,3 @@ def make():
       base.delete_file(root_dir_snap + '/example/nodejs/example')
 
   return
-

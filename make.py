@@ -19,8 +19,6 @@ import make_common
 import develop
 import argparse
 
-base.check_python()
-
 parser = argparse.ArgumentParser(description="options")
 parser.add_argument("--build-only-branding", action="store_true")
 args = parser.parse_args()
@@ -30,6 +28,7 @@ if (args.build_only_branding):
 
 # parse configuration
 config.parse()
+base.check_python()
 
 base_dir = base.get_script_dir(__file__)
 
@@ -92,8 +91,6 @@ if config.check_option("module", "desktop"):
     config.extend_option("config", "updmodule")
     base.set_env("DESKTOP_URL_UPDATES_MAIN_CHANNEL", "https://download.onlyoffice.com/install/desktop/editors/windows/onlyoffice/appcast.json")
     base.set_env("DESKTOP_URL_UPDATES_DEV_CHANNEL", "https://download.onlyoffice.com/install/desktop/editors/windows/onlyoffice/appcastdev.json")
-    base.set_env("DESKTOP_URL_INSTALL_CHANNEL", "https://download.onlyoffice.com/install/desktop/editors/windows/distrib/onlyoffice/<file>")
-    base.set_env("DESKTOP_URL_INSTALL_DEV_CHANNEL", "https://download.onlyoffice.com/install/desktop/editors/windows/onlyoffice/onlineinstallerdev/<file>")
 
 # build
 build_sln.make()

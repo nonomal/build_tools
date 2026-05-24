@@ -201,12 +201,12 @@ def copy_files(src, dst, override=True, verbose=True):
       copy_files(file + "/*", dst + "/" + file_name, override)
   return
 
-def copy_dir(src, dst, verbose=True):
+def copy_dir(src, dst, verbose=True, symlinks=False):
   if verbose:
     log("- copy_dir:")
     log("    src: " + src)
     log("    dst: " + dst)
-  shutil.copytree(src, dst)
+  shutil.copytree(src, dst, symlinks=symlinks)
   return
 
 def copy_dir_content(src, dst, filter_include = "", filter_exclude = "", verbose=True):
@@ -262,6 +262,20 @@ def delete_files(src, verbose=True):
       shutil.rmtree(path, ignore_errors=True)
   return
 
+def remove_all_symlinks(dir):
+  for root, dirs, files in os.walk(dir, topdown=True, followlinks=False):
+    for name in files:
+      path = os.path.join(root, name)
+      if os.path.islink(path):
+        os.unlink(path)
+    
+    for name in list(dirs):
+      path = os.path.join(root, name)
+      if os.path.islink(path):
+        os.unlink(path)
+        dirs.remove(name)
+  return
+
 def set_summary(target, status):
   common.summary.append({target: status})
   return
@@ -296,30 +310,27 @@ def cmd_output(*args, **kwargs):
   ).decode("utf-8")
 
 def powershell(*args, **kwargs):
+  command = ["powershell", "-Command"] + [i for i in args]
   if kwargs.get("verbose"):
     log("- powershell:")
-    log("    command: " + " ".join(args))
+    log("    command: " + " ".join(command))
     if kwargs.get("chdir"):
       log("    chdir: " + kwargs["chdir"])
     if kwargs.get("creates"):
       log("    creates: " + kwargs["creates"])
   if kwargs.get("creates") and is_exist(kwargs["creates"]):
     return False
-  args = ["powershell", "-Command"] + [i for i in args]
-  ret = subprocess.call(
-      args, stderr=subprocess.STDOUT, shell=True
-  ) == 0
+  ret = subprocess.call(command, stderr=subprocess.STDOUT, shell=True) == 0
   return ret
 
 def ps1(file, args=[], **kwargs):
+  command = ["powershell", "-ExecutionPolicy", "ByPass", "-File", file] + args
   if kwargs.get("verbose"):
-    log("- ps1: " + file + " " + " ".join(args))
+    log("- ps1:")
+    log("    command: " + " ".join(command))
   if kwargs.get("creates") and is_exist(kwargs["creates"]):
     return True
-  ret = subprocess.call(
-    ["powershell", "-ExecutionPolicy", "ByPass", "-File", file] + args,
-    stderr=subprocess.STDOUT, shell=True
-  ) == 0
+  ret = subprocess.call(command, stderr=subprocess.STDOUT, shell=True) == 0
   return ret
 
 def sh(command, **kwargs):

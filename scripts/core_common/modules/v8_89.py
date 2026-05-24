@@ -7,6 +7,25 @@ import base
 import os
 import subprocess
 
+def clean():
+  if base.is_dir("depot_tools"):
+    base.delete_dir_with_access_error("depot_tools")
+    base.delete_dir("depot_tools")
+  if base.is_dir("v8"):
+    base.delete_dir_with_access_error("v8")
+    base.delete_dir("v8")
+  if base.is_exist("./.gclient"):
+    base.delete_file("./.gclient")
+  if base.is_exist("./.gclient_entries"):
+    base.delete_file("./.gclient_entries")
+  if base.is_exist("./.gclient_previous_sync_commits"):
+    base.delete_file("./.gclient_previous_sync_commits")
+  if base.is_exist("./.gcs_entries"):
+    base.delete_file("./.gcs_entries")
+  if base.is_exist("./.cipd"):
+    base.delete_dir("./.cipd")
+  return
+
 def change_bootstrap():
   base.move_file("./depot_tools/bootstrap/manifest.txt", "./depot_tools/bootstrap/manifest.txt.bak")
   content = "# changed by build_tools\n\n"
@@ -16,7 +35,11 @@ def change_bootstrap():
   content += "infra/3pp/tools/cpython/${platform} version:2@2.7.18.chromium.39\n\n"
 
   content += "@Subdir python3\n"
-  content += "infra/3pp/tools/cpython3/${platform} version:2@3.8.10.chromium.23\n\n"
+
+  if ("windows" == base.host_platform()):
+    content += "infra/3pp/tools/cpython3/${platform} version:2@3.11.8.chromium.35\n\n"
+  else:
+    content += "infra/3pp/tools/cpython3/${platform} version:2@3.8.10.chromium.23\n\n"
 
   content += "@Subdir git\n"
   content += "infra/3pp/tools/git/${platform} version:2@2.41.0.chromium.11\n"
@@ -28,6 +51,31 @@ def change_bootstrap():
     "    _win_git_bootstrap_config()", "    #_win_git_bootstrap_config()")
   
   base.writeFile("./depot_tools/bootstrap/manifest.txt", content)
+  return
+
+def is_ubuntu_24_or_higher():
+  try:
+    with open('/etc/os-release') as f:
+      for line in f:
+        if line.startswith('VERSION_ID='):
+          version = line.split('=')[1].strip().strip('"')
+          return float(version) >= 24
+  except:
+      pass
+  return False
+
+def fix_ubuntu24():
+  #if not is_ubuntu_24_or_higher():
+  #  return
+
+  if "" == config.option("sysroot"):
+    return
+
+  old_cur = os.getcwd()
+  os.chdir("third_party/llvm-build/Release+Asserts/lib")
+  base.cmd("mv", ["libstdc++.so.6", "libstdc++.so.6.old"])
+  base.cmd("ln", ["-s", "/usr/lib/x86_64-linux-gnu/libstdc++.so.6", "libstdc++.so.6"])
+  os.chdir(old_cur)
   return
 
 def make_args(args, platform, is_64=True, is_debug=False):
@@ -43,8 +91,13 @@ def make_args(args, platform, is_64=True, is_debug=False):
     args_copy = args[:]
     args_copy.append("target_cpu=\\\"arm64\\\"")
     args_copy.append("v8_target_cpu=\\\"arm64\\\"")
-    args_copy.append("use_sysroot=true")
-  
+    
+  if (platform == "win_arm64"):
+    args_copy = args[:]
+    args_copy.append("target_cpu=\\\"arm64\\\"")
+    args_copy.append("v8_target_cpu=\\\"arm64\\\"")
+    args_copy.append("is_clang=false")
+    
   if is_debug:
     args_copy.append("is_debug=true")
     if (platform == "windows"):
@@ -53,27 +106,62 @@ def make_args(args, platform, is_64=True, is_debug=False):
     args_copy.append("is_debug=false")
   
   linux_clang = False
-  if (platform == "linux"):
-    args_copy.append("is_clang=true")
-    if "1" == config.option("use-clang"):
+  if platform == "linux":
+    if "" != config.option("sysroot"):
       args_copy.append("use_sysroot=true")
-      linux_clang = True
+      args_copy.append("is_clang=false")
+      if is_ubuntu_24_or_higher():
+        args_copy.append("use_gold=false")
+      args_copy.append("sysroot=\\\"" + config.option("sysroot_linux_64") + "\\\"")
+      args_copy.append("target_sysroot=\\\"" + config.option("sysroot_linux_64") + "\\\"")
     else:
-      args_copy.append("use_sysroot=false")
+      args_copy.append("is_clang=true")
+      if "1" == config.option("use-clang"):
+        linux_clang = True
+      else:
+        args_copy.append("use_sysroot=false")
+
+  if platform == "linux_arm64":
+    if "" != config.option("sysroot"):
+      args_copy.append("use_sysroot=true")
+      if is_ubuntu_24_or_higher():
+        args_copy.append("use_gold=false")
+      #args_copy.append("sysroot=\\\"" + config.option("sysroot_linux_64") + "\\\"")
+      args_copy.append("target_sysroot=\\\"" + config.option("sysroot_linux_arm64") + "\\\"")
+    else:
+      args_copy.append("is_clang=true")
+      if "1" == config.option("use-clang"):
+        linux_clang = True
+      else:
+        args_copy.append("use_sysroot=false")
+
+
   if (platform == "windows"):
     args_copy.append("is_clang=false")
+
+  if (platform == "mac") and base.is_os_arm():
+    args_copy.append("host_cpu=\\\"x64\\\"")
 
   if linux_clang != True:
     args_copy.append("use_custom_libcxx=false")
 
   return "--args=\"" + " ".join(args_copy) + "\""
 
-def ninja_windows_make(args, is_64=True, is_debug=False):
+def ninja_windows_make(args, is_64=True, is_debug=False, is_arm=False):
   directory_out = "out.gn/"
-  directory_out += ("win_64/" if is_64 else "win_32/")
+    
+  if is_arm:
+    directory_out += "win_arm64/"
+  else:
+    directory_out += ("win_64/" if is_64 else "win_32/")
+    
   directory_out += ("debug" if is_debug else "release")
 
-  base.cmd2("gn", ["gen", directory_out, make_args(args, "windows", is_64, is_debug)])
+  if is_arm:
+    base.cmd2("gn", ["gen", directory_out, make_args(args, "win_arm64", is_64, is_debug)])
+  else:
+    base.cmd2("gn", ["gen", directory_out, make_args(args, "windows", is_64, is_debug)])
+    
   base.copy_file("./" + directory_out + "/obj/v8_wrappers.ninja", "./" + directory_out + "/obj/v8_wrappers.ninja.bak")
   base.replaceInFile("./" + directory_out + "/obj/v8_wrappers.ninja", "target_output_name = v8_wrappers", "target_output_name = v8_wrappers\nbuild obj/v8_wrappers.obj: cxx ../../../src/base/platform/wrappers.cc")
   base.replaceInFile("./" + directory_out + "/obj/v8_wrappers.ninja", "build obj/v8_wrappers.lib: alink", "build obj/v8_wrappers.lib: alink obj/v8_wrappers.obj")
@@ -83,7 +171,10 @@ def ninja_windows_make(args, is_64=True, is_debug=False):
   if (-1 == win_toolset_wrapper_file_content.find("line = line.decode('utf8')")):
     base.replaceInFile(win_toolset_wrapper_file, "for line in link.stdout:\n", "for line in link.stdout:\n      line = line.decode('utf8')\n")
 
+
   base.cmd("ninja", ["-C", directory_out, "v8_wrappers"])
+  if is_arm:
+    base.copy_file('./' + directory_out + '/obj/v8_wrappers.lib', './' + directory_out + '/x64/obj/v8_wrappers.lib')
   base.cmd("ninja", ["-C", directory_out])
   base.delete_file("./" + directory_out + "/obj/v8_wrappers.ninja")
   base.move_file("./" + directory_out + "/obj/v8_wrappers.ninja.bak", "./" + directory_out + "/obj/v8_wrappers.ninja")
@@ -123,6 +214,8 @@ def make():
     base.cmd("git", ["config", "--global", "http.postBuffer", "157286400"], True)
 
   os.chdir(base_dir)
+  base.common_check_version("v8", "1", clean)
+    
   if not base.is_dir("depot_tools"):
     base.cmd("git", ["clone", "https://chromium.googlesource.com/chromium/tools/depot_tools.git"])
     change_bootstrap()
@@ -146,11 +239,25 @@ def make():
     base.cmd("./depot_tools/gclient", ["sync", "-r", v8_branch_version], True)
     base.cmd("gclient", ["sync", "--force"], True)
     base.copy_dir("./v8/third_party_new/ninja", "./v8/third_party/ninja")
+    if ("linux" == base.host_platform()):
+      if not base.is_file("./depot_tools/python3_bin_reldir.txt"):
+        base.cmd_in_dir("./depot_tools", "./ensure_bootstrap", [], True)
 
   if ("windows" == base.host_platform()):
     base.replaceInFile("v8/build/config/win/BUILD.gn", ":static_crt", ":dynamic_crt")
+    
+    # fix for new depot_tools and vs2019, as VC folder contains a folder with a symbol in the name
+    # sorting is done by increasing version, so 0 is a dummy value
+    replace_src = "  def to_int_if_int(x):\n    try:\n      return int(x)\n    except ValueError:\n      return x"
+    replace_dst = "  def to_int_if_int(x):\n    try:\n      return int(x)\n    except ValueError:\n      return 0"
+    base.replaceInFile("v8/build/vs_toolchain.py", replace_src, replace_dst)
+    
+    
     if not base.is_file("v8/src/base/platform/wrappers.cc"):
       base.writeFile("v8/src/base/platform/wrappers.cc", "#include \"src/base/platform/wrappers.h\"\n")
+  
+    if config.check_option("platform", "win_arm64"):
+      base.replaceInFile("v8/build/toolchain/win/setup_toolchain.py", "SDK_VERSION = \'10.0.26100.0\'", "SDK_VERSION = \'10.0.22621.0\'")
   else:
     base.replaceInFile("depot_tools/gclient_paths.py", "@functools.lru_cache", "")
 
@@ -164,6 +271,9 @@ def make():
     base.replaceInFile("v8/third_party/jinja2/tests.py", "from collections import Mapping", "try:\n    from collections.abc import Mapping\nexcept ImportError:\n    from collections import Mapping")
 
   os.chdir("v8")
+
+  is_ubuntu24 = is_ubuntu_24_or_higher()
+  fix_ubuntu24()
   
   gn_args = ["v8_static_library=true",
              "is_component_build=false",
@@ -172,8 +282,24 @@ def make():
              "treat_warnings_as_errors=false"]
 
   if config.check_option("platform", "linux_64"):
-    base.cmd2("gn", ["gen", "out.gn/linux_64", make_args(gn_args, "linux")])
-    base.cmd("ninja", ["-C", "out.gn/linux_64"])
+    if config.option("sysroot") != "":
+      sysroot_path = config.option("sysroot_linux_64")
+      sysroot_path_bin = config.get_custom_sysroot_bin("linux_64")
+
+      old_env = dict(os.environ)
+      base.set_sysroot_env("linux_64")
+
+      pkg_old = os.environ.get("PKG_CONFIG_PATH", "")
+      os.environ["PKG_CONFIG_PATH"] = sysroot_path + "/usr/lib/x86_64-linux-gnu/pkgconfig:" + sysroot_path + "/usr/lib/pkgconfig:" + sysroot_path + "/usr/share/pkgconfig"
+      base.cmd2("gn", ["gen", "out.gn/linux_64", make_args(gn_args, "linux")], False)
+      os.environ["PKG_CONFIG_PATH"] = pkg_old
+
+      base.cmd2("ninja", ["-C", "out.gn/linux_64"], False)
+      base.restore_sysroot_env()
+    else:
+      base.cmd2("gn", ["gen", "out.gn/linux_64", make_args(gn_args, "linux")], False)
+      base.cmd2("ninja", ["-C", "out.gn/linux_64"], False)
+
 
   if config.check_option("platform", "linux_32"):
     base.cmd2("gn", ["gen", "out.gn/linux_32", make_args(gn_args, "linux", False)])
@@ -181,12 +307,21 @@ def make():
 
   if config.check_option("platform", "linux_arm64"):
     base.cmd("build/linux/sysroot_scripts/install-sysroot.py", ["--arch=arm64"], False)
+    
+    sysroot_path = config.option("sysroot_linux_64")
+    pkg_old = os.environ.get("PKG_CONFIG_PATH", "")
+    os.environ["PKG_CONFIG_PATH"] = sysroot_path + "/usr/lib/x86_64-linux-gnu/pkgconfig:" + sysroot_path + "/usr/lib/pkgconfig:" + sysroot_path + "/usr/share/pkgconfig"
     base.cmd2("gn", ["gen", "out.gn/linux_arm64", make_args(gn_args, "linux_arm64", False)])
+    os.environ["PKG_CONFIG_PATH"] = pkg_old
+
     base.cmd("ninja", ["-C", "out.gn/linux_arm64"])
 
   if config.check_option("platform", "mac_64"):
     base.cmd2("gn", ["gen", "out.gn/mac_64", make_args(gn_args, "mac")])
     base.cmd("ninja", ["-C", "out.gn/mac_64"])
+    
+  if config.check_option("platform", "win_arm64") and not base.is_file("out.gn/win_arm64/release/obj/v8_monolith.lib"):
+    ninja_windows_make(gn_args, True, False, True)
 
   if config.check_option("platform", "win_64"):
     if (-1 != config.option("config").lower().find("debug")):

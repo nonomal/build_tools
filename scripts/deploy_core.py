@@ -25,6 +25,7 @@ def make():
 
     platform = native_platform
     platform_postfix = platform + base.qt_dst_postfix()
+    isWindowsXP = False if (-1 == native_platform.find("_xp")) else True
 
     base.copy_lib(core_build_dir + "/lib/" + platform_postfix, archive_dir, "kernel")
     base.copy_lib(core_build_dir + "/lib/" + platform_postfix, archive_dir, "kernel_network")
@@ -42,6 +43,8 @@ def make():
     base.copy_lib(core_build_dir + "/lib/" + platform_postfix, archive_dir, "HWPFile")
     base.copy_lib(core_build_dir + "/lib/" + platform_postfix, archive_dir, "DocxRenderer")
     base.copy_lib(core_build_dir + "/lib/" + platform_postfix, archive_dir, "hunspell")
+    base.copy_lib(core_build_dir + "/lib/" + platform_postfix, archive_dir, "StarMathConverter")
+    base.copy_lib(core_build_dir + "/lib/" + platform_postfix, archive_dir, "ooxmlsignature", "xp" if isWindowsXP else "")
     base.copy_file(git_dir + "/sdkjs/pdf/src/engine/cmap.bin", archive_dir + "/cmap.bin")
     base.copy_exe(core_build_dir + "/bin/" + platform_postfix, archive_dir, "x2t")
 
@@ -53,7 +56,8 @@ def make():
     if ("windows" == base.host_platform()):
       base.copy_files(core_dir + "/Common/3dParty/icu/" + platform + "/build/*.dll", archive_dir + "/")
     else:
-      base.copy_files(core_dir + "/Common/3dParty/icu/" + platform + "/build/*", archive_dir + "/")
+      if not (0 == platform.find("mac") and config.check_option("config", "bundle_dylibs")):
+        base.copy_files(core_dir + "/Common/3dParty/icu/" + platform + "/build/*", archive_dir + "/")
     base.copy_v8_files(core_dir, archive_dir, platform)
 
     base.copy_exe(core_build_dir + "/bin/" + platform_postfix, archive_dir, "allfontsgen")
@@ -66,6 +70,11 @@ def make():
     base.copy_exe(core_build_dir + "/bin/" + platform_postfix, archive_dir, "metafiletester")
     base.copy_exe(core_build_dir + "/bin/" + platform_postfix, archive_dir, "dictionariestester")
 
+    # correct mac frameworks
+    if (0 == platform.find("mac")):
+      base.for_each_framework(archive_dir, "mac", callbacks=[base.generate_plist], max_depth=1)
+      base.mac_correct_rpath_x2t(archive_dir)
+
     # js cache
     base.generate_doctrenderer_config(archive_dir + "/DoctRenderer.config", "./", "builder", "", "./dictionaries")
     base.create_x2t_js_cache(archive_dir, "core", platform)
@@ -74,4 +83,3 @@ def make():
     # dictionaries
     base.copy_dictionaries(git_dir + "/dictionaries", archive_dir + "/dictionaries", True, False)
   return
-

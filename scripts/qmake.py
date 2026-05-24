@@ -25,7 +25,7 @@ def get_j_num():
 
 def check_support_platform(platform):
   qt_dir = base.qt_setup(platform)
-  if not base.is_file(qt_dir + "/bin/qmake") and not base.is_file(qt_dir + "/bin/qmake.exe"):
+  if not base.is_file(qt_dir + "/bin/qmake") and not base.is_file(qt_dir + "/bin/qmake.exe") and not base.is_file(qt_dir + "/bin/qmake.bat"):
     return False
   return True
 
@@ -36,7 +36,7 @@ def make(platform, project, qmake_config_addon="", is_no_errors=False):
     return
 
   old_env = dict(os.environ)
-  
+
   # qt
   qt_dir = base.qt_setup(platform)
   base.set_env("OS_DEPLOY", platform)
@@ -50,7 +50,7 @@ def make(platform, project, qmake_config_addon="", is_no_errors=False):
   if (pro_dir.endswith("/")):
     pro_dir = pro_dir[:-1]
 
-  makefile_name = "Makefile." + get_make_file_suffix(platform) 
+  makefile_name = "Makefile." + get_make_file_suffix(platform)
   makefile = pro_dir + "/" + makefile_name
   stash_file = pro_dir + "/.qmake.stash"
 
@@ -73,6 +73,11 @@ def make(platform, project, qmake_config_addon="", is_no_errors=False):
   # setup ios env
   if (-1 != platform.find("ios")):
     base.hack_xcode_ios()
+    sdk_name = "iphoneos"
+    if qmake_config_addon.find("ios_simulator") != -1:
+      sdk_name = "iphonesimulator"
+    base.set_env("SDK_PATH", base.find_ios_sdk(sdk_name))
+    base.set_env("XCODE_TOOLCHAIN_PATH", base.find_xcode_toolchain(sdk_name))
 
   if base.is_file(makefile):
     base.delete_file(makefile)
@@ -91,6 +96,7 @@ def make(platform, project, qmake_config_addon="", is_no_errors=False):
   build_params = ["-nocache", file_pro] + base.qt_config_as_param(config_param) + qmake_addon
 
   qmake_app = qt_dir + "/bin/qmake"
+
   # non windows platform
   if not base.is_windows():
     if base.is_file(qt_dir + "/onlyoffice_qt.conf"):
@@ -99,14 +105,35 @@ def make(platform, project, qmake_config_addon="", is_no_errors=False):
     if "1" == config.option("use-clang"):
       build_params.append("-spec")
       build_params.append("linux-clang-libc++")
-    base.cmd(qmake_app, build_params)
+
+    if "" != config.option("sysroot"):
+      sysroot_path = config.option("sysroot_" + platform)
+      os.environ['QMAKE_CUSTOM_SYSROOT'] = sysroot_path
+      os.environ['QMAKE_CUSTOM_SYSROOT_BIN'] = config.get_custom_sysroot_bin(platform)
+      os.environ['PKG_CONFIG_PATH'] = config.get_custom_sysroot_lib(platform, True) + "/pkgconfig"
+      os.environ['PKG_CONFIG_SYSROOT_DIR'] = sysroot_path
+
+    base.cmd_exe(qmake_app, build_params)
+
+    if "" != config.option("sysroot"):
+      base.set_sysroot_env(platform)
+
     base.correct_makefile_after_qmake(platform, makefile)
     if ("1" == config.option("clean")):
       base.cmd_and_return_cwd("make", clean_params, True)
       base.cmd_and_return_cwd("make", distclean_params, True)
-      base.cmd(qmake_app, build_params)
+      
+      if "" != config.option("sysroot"):
+        base.restore_sysroot_env()
+      base.cmd(qmake_app, build_params)   
+      if "" != config.option("sysroot"):
+        base.set_sysroot_env(platform)
+      
       base.correct_makefile_after_qmake(platform, makefile)
     base.cmd_and_return_cwd("make", ["-f", makefile] + get_j_num(), is_no_errors)
+
+    if "" != config.option("sysroot"):
+      base.restore_sysroot_env()
   else:
     config_params_array = base.qt_config_as_param(config_param)
     config_params_string = ""
@@ -116,12 +143,22 @@ def make(platform, project, qmake_config_addon="", is_no_errors=False):
     if ("" != qmake_addon_string):
       qmake_addon_string = " " + qmake_addon_string
 
+    vcvarsall_arch = "x64"
+    if base.platform_is_32(platform):
+      vcvarsall_arch = "x86"
+    if (platform == "win_arm64"):
+      vcvarsall_arch = "x64_arm64"
+
+    qmake_env_addon = base.get_env("QT_QMAKE_ADDON")
+    if (qmake_env_addon != ""):
+      qmake_env_addon += " "
+
     qmake_bat = []
-    qmake_bat.append("call \"" + config.option("vs-path") + "/vcvarsall.bat\" " + ("x86" if base.platform_is_32(platform) else "x64"))
+    qmake_bat.append("call \"" + config.option("vs-path") + "/vcvarsall.bat\" " + vcvarsall_arch)
     qmake_addon_string = ""
     if ("" != config.option("qmake_addon")):
       qmake_addon_string = " " + (" ").join(["\"" + addon + "\"" for addon in qmake_addon])
-    qmake_bat.append("call \"" + qmake_app + "\" -nocache " + file_pro + config_params_string + qmake_addon_string)
+    qmake_bat.append("call \"" + qmake_app + "\" -nocache " + qmake_env_addon + file_pro + config_params_string + qmake_addon_string)
     if ("1" == config.option("clean")):
       qmake_bat.append("call nmake " + " ".join(clean_params))
       qmake_bat.append("call nmake " + " ".join(distclean_params))

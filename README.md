@@ -1,221 +1,202 @@
-# build_tools
+<h1>ONLYOFFICE Build Tools</h1>
 
-## Overview
+Welcome to the ```build_tools``` repository! This powerful toolkit simplifies the process of compiling [ONLYOFFICE](https://github.com/ONLYOFFICE) products from source on Linux.
 
-**build_tools** allow you to automatically get and install all the components
-necessary for the compilation process, all the dependencies required for the
-**ONLYOFFICE Document Server**, **Document Builder** and **Desktop Editors**
- correct work, as well as to get the latest version of
-**ONLYOFFICE products** source code and build all their components.
+It automatically fetches all the required dependencies and source code to build the latest versions of:
 
-**Important!**  We can only guarantee the correct work of the products built
-from the `master` branch.
+* [Docs (Document Server)](https://www.onlyoffice.com/docs?utm_source=github&utm_medium=cpc&utm_campaign=GitHubBuildTools)  
+* [Desktop Editors](https://www.onlyoffice.com/desktop?utm_source=github&utm_medium=cpc&utm_campaign=GitHubBuildTools)  
+* [Document Builder](https://www.onlyoffice.com/document-builder?utm_source=github&utm_medium=cpc&utm_campaign=GitHubBuildTools)
 
-## How to use - Linux
+**A quick note:** For the most stable and reliable builds, we strongly recommend compiling from the ```master``` branch of this repository.
 
-**Note**: The solution has been tested on **Ubuntu 16.04**.
+## **How do I use it on Linux? 🐧**
 
-### Installing dependencies
+>This guide has been tested and verified on:
 
-You might need to install **Python**, depending on your version of Ubuntu:
+| Component     | Specification     |
+|---------------|-------------------|
+| OS            | Ubuntu 24.04      |
+| Architecture  | amd64             |
+| CPU           | 4 cores           |
+| RAM           | 8 GB              |
+| Swap          | 4 GB              |
+| Storage       | 100 GB SSD        |
+
+### **Step 1: Install dependencies**
+
+First, let's make sure you have **Python** installed, as it's needed to run the build scripts.
 
 ```bash
 sudo apt-get install -y python
 ```
 
-### Building ONLYOFFICE products source code
+### **Step 2: Build the source code**
 
-1. Clone the build_tools repository:
+Now, you're ready to build the ONLYOFFICE products.
 
-    ```bash
-    git clone https://github.com/ONLYOFFICE/build_tools.git
-    ```
+1. **Clone the build_tools repository:**  
 
-2. Go to the `build_tools/tools/linux` directory:
+    This command downloads the build tools to your machine using Git:
+   ```bash
+   git clone https://github.com/ONLYOFFICE/build_tools.git
+   ```
 
-    ```bash
-    cd build_tools/tools/linux
-    ```
+2. **Navigate to the scripts directory:**  
+   ```bash
+   cd build_tools/tools/linux
+   ```
+3. **Run the automation script:**  
+   
+   This is where the magic happens! Running the script without any options will build all three products: Document Server, Document Builder, and Desktop Editors.  
 
-3. Run the `automate.py` script:
-
-    ```bash
-    ./automate.py
-    ```
-
-If you run the script without any parameters this allows to build **ONLYOFFICE
-Document Server**, **Document Builder** and **Desktop Editors**.
-
-The result will be available in the `./out` directory.
-
-To build **ONLYOFFICE** products separately run the script with the parameter
-corresponding to the necessary product.
-
-It’s also possible to build several products at once as shown in the example
-below.
-
-**Example**: Building **Desktop Editors** and **Document Server**
-
+   ```bash
+   python3 ./automate.py
+   ```
+You can also build ONLYOFFICE products separately. Just run the script with the parameter corresponding to the necessary product. For example, to build *Desktop Editors* and *Document Server*
 ```bash
-./automate.py desktop server
+python3 ./automate.py desktop server
 ```
 
-### Using Docker
+**Perfect!** Once the script finishes, you will find the compiled products in the ```./out``` directory.
 
-You can also build all **ONLYOFFICE products** at once using Docker.
-Build the `onlyoffice-document-editors-builder` Docker image using the
-provided `Dockerfile` and run the corresponding Docker container.
+## **Advanced options & different workflows 🚀**
+
+### **How to use Docker**
+
+If you prefer using Docker, you can build all products inside a container. This is a great way to keep your local system clean.
+
+1. **Install Docker** https://docs.docker.com/engine/install/
+
+2. **Clone the build_tools repository:**
+   ```bash
+   git clone https://github.com/ONLYOFFICE/build_tools.git
+    ```
+
+3. **Go to the build_tools:**
+   ```bash
+   cd build_tools
+    ```
+
+4. **Create an output directory:**  
+
+   ```bash
+   mkdir out
+    ```
+
+5. **Build the Docker image:**  
+
+   ```bash
+   docker build --tag onlyoffice-document-editors-builder .
+   ```
+
+6. **Run the container to start the build:** 
+   
+   This command mounts your local out directory into the container, so the final build files will appear on your machine. 
+
+   ```bash 
+   docker run -v $PWD/out:/build_tools/out onlyoffice-document-editors-builder
+    ```
+
+You've done it! The results will be in the ```./out``` directory you created.
+
+## **How to build and run the products separately ▶️**
+
+Don't need everything? You can save time by building only the products you need. Just add the product name as an argument to the script.
+
+### Need just the [Document Builder](https://github.com/ONLYOFFICE/DocumentBuilder)❓
+* How to build
+
+  ```bash
+  python3 ./automate.py builder
+  ```
+* How to run
+  ```bash
+  cd ../../out/linux_64/onlyoffice/documentbuilder
+  ./docbuilder
+  ```
+
+### Need just the [Desktop Editors](https://github.com/ONLYOFFICE/DesktopEditors)❓
+
+* How to build
+  ```bash
+  python3 ./automate.py desktop
+  ```
+* How to run
+  ```bash
+  cd ../../out/linux_64/onlyoffice/desktopeditors
+  LD_LIBRARY_PATH=./ ./DesktopEditors
+  ```
+
+### Need just the [Docs (Document Server)](https://github.com/ONLYOFFICE/DocumentServer)❓
+* How to build
+  ```bash
+  python3 ./automate.py server
+  ```
+* How to run
+
+  Running the Document Server is a multi-step process because it relies on a few background services. Let's break it down step by step. 
+
+#### **Step 1. Install and configure NGINX**
+
+1. Install NGINX  
+```bash
+sudo apt-get install nginx
+```
+2. Disable the default NGINX site
+```bash
+sudo rm -f /etc/nginx/sites-enabled/default
+```
+3. Set up the new website. To do that create the ```/etc/nginx/sites-available/onlyoffice-documentserver``` file with the following contents:
 
 ```bash
-mkdir out
-docker build --tag onlyoffice-document-editors-builder .
-docker run -v $PWD/out:/build_tools/out onlyoffice-document-editors-builder
+map $http_host $this_host {
+  "" $host;
+  default $http_host;
+}
+map $http_x_forwarded_proto $the_scheme {
+  default $http_x_forwarded_proto;
+  "" $scheme;
+}
+map $http_x_forwarded_host $the_host {
+  default $http_x_forwarded_host;
+  "" $this_host;
+}
+map $http_upgrade $proxy_connection {
+  default upgrade;
+  "" close;
+}
+proxy_set_header Host $http_host;
+proxy_set_header Upgrade $http_upgrade;
+proxy_set_header Connection $proxy_connection;
+proxy_set_header X-Forwarded-Host $the_host;
+proxy_set_header X-Forwarded-Proto $the_scheme;
+server {
+  listen 0.0.0.0:80;
+  listen [::]:80 default_server;
+  server_tokens off;
+  rewrite ^\/OfficeWeb(\/apps\/.*)$ /web-apps$1 redirect;
+  location / {
+    proxy_pass http://localhost:8000;
+    proxy_http_version 1.1;
+  }
+}
 ```
 
-The result will be available in the `./out` directory.
-
-### Building and running ONLYOFFICE products separately
-
-#### Document Builder
-
-##### Building Document Builder
-
+4. Enable the new site by creating a symbolic link  
 ```bash
-./automate.py builder
+sudo ln -s /etc/nginx/sites-available/onlyoffice-documentserver /etc/nginx/sites-enabled/onlyoffice-documentserver
 ```
-
-##### Running Document Builder
-
+5. Restart NGINX to apply the changes  
 ```bash
-cd ../../out/linux_64/onlyoffice/documentbuilder
-./docbuilder
+sudo nginx -s reload
 ```
 
-#### Desktop Editors
+#### **Step 2. Generate server files**
 
-##### Building Desktop Editors
+Before running the server, you need to generate font and theme data.
 
-```bash
-./automate.py desktop
-```
-
-##### Running Desktop Editors
-
-```bash
-cd ../../out/linux_64/onlyoffice/desktopeditors
-LD_LIBRARY_PATH=./ ./DesktopEditors
-```
-
-#### Document Server
-
-##### Building Document Server
-
-```bash
-./automate.py server
-```
-
-##### Installing and configuring Document Server dependencies
-
-**Document Server** uses **NGINX** as a web server and **PostgreSQL** as a database.
-**RabbitMQ** is also required for **Document Server** to work correctly.
-
-###### Installing and configuring NGINX
-
-1. Install NGINX:
-
-    ```bash
-    sudo apt-get install nginx
-    ```
-
-2. Disable the default website:
-
-    ```bash
-    sudo rm -f /etc/nginx/sites-enabled/default
-    ```
-
-3. Set up the new website. To do that create the `/etc/nginx/sites-available/onlyoffice-documentserver`
-   file with the following contents:
-
-    ```bash
-    map $http_host $this_host {
-      "" $host;
-      default $http_host;
-    }
-    map $http_x_forwarded_proto $the_scheme {
-      default $http_x_forwarded_proto;
-      "" $scheme;
-    }
-    map $http_x_forwarded_host $the_host {
-      default $http_x_forwarded_host;
-      "" $this_host;
-    }
-    map $http_upgrade $proxy_connection {
-      default upgrade;
-      "" close;
-    }
-    proxy_set_header Host $http_host;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection $proxy_connection;
-    proxy_set_header X-Forwarded-Host $the_host;
-    proxy_set_header X-Forwarded-Proto $the_scheme;
-    server {
-      listen 0.0.0.0:80;
-      listen [::]:80 default_server;
-      server_tokens off;
-      rewrite ^\/OfficeWeb(\/apps\/.*)$ /web-apps$1 redirect;
-      location / {
-        proxy_pass http://localhost:8000;
-        proxy_http_version 1.1;
-      }
-    }
-    ```
-
-4. Add the symlink to the newly created website to the
-   `/etc/nginx/sites-available` directory:
-
-    ```bash
-    sudo ln -s /etc/nginx/sites-available/onlyoffice-documentserver /etc/nginx/sites-enabled/onlyoffice-documentserver
-    ```
-
-5. Restart NGINX to apply the changes:
-
-    ```bash
-    sudo nginx -s reload
-    ```
-
-###### Installing and configuring PostgreSQL
-
-1. Install PostgreSQL:
-
-    ```bash
-    sudo apt-get install postgresql
-    ```
-
-2. Create the PostgreSQL database and user:
-
-    **Note**: The created database must have **onlyoffice** both for user and password.
-
-    ```bash
-    sudo -i -u postgres psql -c "CREATE USER onlyoffice WITH PASSWORD 'onlyoffice';"
-    sudo -i -u postgres psql -c "CREATE DATABASE onlyoffice OWNER onlyoffice;"
-    ```
-
-3. Configure the database:
-
-    ```bash
-    psql -hlocalhost -Uonlyoffice -d onlyoffice -f ../../out/linux_64/onlyoffice/documentserver/server/schema/postgresql/createdb.sql
-    ```
-
-**Note**: Upon that, you will be asked to provide a password for the **onlyoffice**
-PostgreSQL user. Please enter the **onlyoffice** password.
-
-###### Installing RabbitMQ
-
-```bash
-sudo apt-get install rabbitmq-server
-```
-
-###### Generate fonts data
+##### **Generate fonts data**
 
 ```bash
 cd out/linux_64/onlyoffice/documentserver/
@@ -230,8 +211,7 @@ LD_LIBRARY_PATH=${PWD}/server/FileConverter/bin server/tools/allfontsgen \
   --use-system="true"
 ```
 
-###### Generate presentation themes
-
+##### **Generate presentation themes**
 ```bash
 cd out/linux_64/onlyoffice/documentserver/
 LD_LIBRARY_PATH=${PWD}/server/FileConverter/bin server/tools/allthemesgen \
@@ -240,27 +220,39 @@ LD_LIBRARY_PATH=${PWD}/server/FileConverter/bin server/tools/allthemesgen \
   --output="${PWD}/sdkjs/common/Images"
 ```
 
-##### Running Document Server
+#### **Step 3. Run the Document Server services**
 
-**Note**: All **Document Server** components run as foreground processes. Thus
-you need separate terminal consoles to run them or specific tools which will
-allow to run foreground processes in background mode.
+All Document Server components run as foreground processes. Thus you need separate terminal consoles to run them or specific tools which will allow to run foreground processes in background mode.
 
-1. Start the **FileConverter** service:
+* **Start the FileConverter service:**  
+  ```bash
+  cd out/linux_64/onlyoffice/documentserver/server/FileConverter
+  LD_LIBRARY_PATH=$PWD/bin \
+  NODE_ENV=development-linux \
+  NODE_CONFIG_DIR=$PWD/../Common/config \
+  ./converter
+  ```
 
-    ```bash
-    cd out/linux_64/onlyoffice/documentserver/server/FileConverter
-    LD_LIBRARY_PATH=$PWD/bin \
-    NODE_ENV=development-linux \
-    NODE_CONFIG_DIR=$PWD/../Common/config \
-    ./converter
-    ```
+* **Start the DocService service:**  
+  ```bash
+  cd out/linux_64/onlyoffice/documentserver/server/DocService
+  NODE_ENV=development-linux \
+  NODE_CONFIG_DIR=$PWD/../Common/config \
+  ./docservice
+  ```
 
-2. Start the **DocService** service:
+## And it's a wrap!  🎉
+Congratulations! You have successfully used the ```build_tools``` to compile your desired ONLYOFFICE products from the latest source code. 
 
-    ```bash
-    cd out/linux_64/onlyoffice/documentserver/server/DocService
-    NODE_ENV=development-linux \
-    NODE_CONFIG_DIR=$PWD/../Common/config \
-    ./docservice
-    ```
+Everything is now set up. You can go ahead and run your brand-new, self-compiled ONLYOFFICE applications. 
+
+## Need help or have an idea? 💡
+
+* **🐞 Found a bug?** Please report it by creating an [issue](https://github.com/ONLYOFFICE/build_tools/issues).
+* **❓ Have a question?** Ask our community and developers on the [ONLYOFFICE Forum](https://community.onlyoffice.com).
+* **💡 Want to suggest a feature?** Share your ideas on our [feedback platform](https://feedback.onlyoffice.com/forums/966080-your-voice-matters).
+* **🧑‍💻 Need help for developers?** Check our [API documentation](https://api.onlyoffice.com/?utm_source=github&utm_medium=cpc&utm_campaign=GitHubBuildTools).
+
+---
+
+<p align="center"> Made with ❤️ by the ONLYOFFICE Team </p>

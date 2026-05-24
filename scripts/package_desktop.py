@@ -35,156 +35,131 @@ def s3_upload(files, dst):
 #
 
 def make_windows():
-  global package_name, package_version, arch, xp, suffix
-  utils.set_cwd("desktop-apps\\win-linux\\package\\windows")
+  global package_name, package_version, arch
+  utils.set_cwd("desktop-apps\\package")
 
   package_name = branding.desktop_package_name
   package_version = common.version + "." + common.build
   arch = {
     "windows_x64":    "x64",
-    "windows_x64_xp": "x64",
     "windows_x86":    "x86",
-    "windows_x86_xp": "x86"
+    "windows_arm64":  "arm64"
   }[common.platform]
-  xp = common.platform.endswith("_xp")
-  suffix = arch + ("-xp" if xp else "")
 
   if common.clean:
     utils.log_h2("desktop clean")
-    utils.delete_dir("DesktopEditors-cache")
-    utils.delete_files("*.exe")
-    utils.delete_files("*.msi")
-    utils.delete_files("*.aic")
-    utils.delete_files("*.tmp")
-    utils.delete_files("*.zip")
-    utils.delete_files("data\\*.exe")
+    utils.delete_dir("build")
+    utils.delete_files("inno\\package.config")
+    utils.delete_files("inno\\*.exe")
+    utils.delete_dir("advinst\\DesktopEditors-cache")
+    utils.delete_files("advinst\\package.config")
+    utils.delete_files("advinst\\*.msi")
+    utils.delete_files("advinst\\*.aic")
+    utils.delete_dir("zip")
 
-  make_prepare()
-  make_zip()
-  make_inno()
-  make_advinst()
-  make_online()
+  if make_prepare():
+    make_zip()
+    if branding.onlyoffice:
+      make_inno()
+      make_inno("standalone")
+      make_advinst()
+  else:
+    utils.set_summary("desktop zip opensource build", False)
+    utils.set_summary("desktop inno opensource build", False)
+    utils.set_summary("desktop inno standalone build", False)
+    utils.set_summary("desktop advinst opensource build", False)
+
+  if branding.onlyoffice and make_prepare("commercial"):
+    make_zip("commercial")
+    make_inno("commercial")
+    make_advinst("commercial")
+  else:
+    utils.set_summary("desktop zip commercial build", False)
+    utils.set_summary("desktop inno commercial build", False)
+    utils.set_summary("desktop advinst commercial build", False)
 
   utils.set_cwd(common.workspace_dir)
   return
 
-def make_prepare():
+def make_prepare(edition = "opensource"):
   args = [
     "-Version", package_version,
-    "-Arch", arch
+    "-Arch", arch,
+    "-Target", edition
   ]
-  if xp:
-    args += ["-Target", "xp"]
   if common.sign:
     args += ["-Sign"]
 
-  utils.log_h2("desktop prepare")
+  utils.log_h2("desktop prepare " + edition)
   ret = utils.ps1("make.ps1", args, verbose=True)
-  utils.set_summary("desktop prepare", ret)
-  return
+  utils.set_summary("desktop prepare " + edition, ret)
+  return ret
 
-def make_zip():
-  zip_file = "%s-%s-%s.zip" % (package_name, package_version, suffix)
+def make_zip(edition = "opensource"):
+  if edition == "commercial": zip_file = "%s-Enterprise-%s-%s.zip"
+  else:                       zip_file = "%s-%s-%s.zip"
+  zip_file = "zip\\" + zip_file % (package_name, package_version, arch)
   args = [
     "-Version", package_version,
-    "-Arch", arch
+    "-Arch", arch,
+    "-Target", edition
   ]
-  if xp:
-    args += ["-Target", "xp"]
   # if common.sign:
   #   args += ["-Sign"]
 
-  utils.log_h2("desktop zip build")
+  utils.log_h2("desktop zip " + edition + " build")
   ret = utils.ps1("make_zip.ps1", args, verbose=True)
-  utils.set_summary("desktop zip build", ret)
+  utils.set_summary("desktop zip " + edition + " build", ret)
 
   if common.deploy and ret:
-    utils.log_h2("desktop zip deploy")
+    utils.log_h2("desktop zip " + edition + " deploy")
     ret = s3_upload([zip_file], "desktop/win/generic/")
-    utils.set_summary("desktop zip deploy", ret)
+    utils.set_summary("desktop zip " + edition + " deploy", ret)
   return
 
-def make_inno():
-  inno_file = "%s-%s-%s.exe" % (package_name, package_version, suffix)
-  inno_sa_file = "%s-Standalone-%s-%s.exe" % (package_name, package_version, suffix)
-  inno_update_file = "%s-Update-%s-%s.exe" % (package_name, package_version, suffix)
-  update_wrapper = not (hasattr(branding, 'desktop_updates_skip_iss_wrapper') and branding.desktop_updates_skip_iss_wrapper)
+def make_inno(edition = "opensource"):
+  if   edition == "commercial": inno_file = "%s-Enterprise-%s-%s.exe"
+  elif edition == "standalone": inno_file = "%s-Standalone-%s-%s.exe"
+  else:                         inno_file = "%s-%s-%s.exe"
+  inno_file = "inno\\" + inno_file % (package_name, package_version, arch)
   args = [
     "-Version", package_version,
-    "-Arch", arch
+    "-Arch", arch,
+    "-Target", edition
   ]
   if common.sign:
     args += ["-Sign"]
 
-  utils.log_h2("desktop inno build")
-  if xp:
-    ret = utils.ps1("make_inno.ps1", args + ["-Target", "xp"], verbose=True)
-  else:
-    ret = utils.ps1("make_inno.ps1", args, verbose=True)
-  utils.set_summary("desktop inno build", ret)
+  utils.log_h2("desktop inno " + edition + " build")
+  ret = utils.ps1("make_inno.ps1", args, verbose=True)
+  utils.set_summary("desktop inno " + edition + " build", ret)
 
-  if branding.onlyoffice and not xp:
-    utils.log_h2("desktop inno standalone")
-    ret = utils.ps1("make_inno.ps1", args + ["-Target", "standalone"], verbose=True)
-    utils.set_summary("desktop inno standalone build", ret)
-
-  if update_wrapper and not xp:
-    utils.log_h2("desktop inno update build")
-    ret = utils.ps1("make_inno.ps1", args + ["-Target", "update"], verbose=True)
-    utils.set_summary("desktop inno update build", ret)
-
-  if common.deploy:
-    utils.log_h2("desktop inno deploy")
+  if common.deploy and ret:
+    utils.log_h2("desktop inno " + edition + " deploy")
     ret = s3_upload([inno_file], "desktop/win/inno/")
-    utils.set_summary("desktop inno deploy", ret)
-
-    if branding.onlyoffice and not xp:
-      utils.log_h2("desktop inno standalone deploy")
-      ret = s3_upload([inno_sa_file], "desktop/win/inno/")
-      utils.set_summary("desktop inno standalone deploy", ret)
-
-    utils.log_h2("desktop inno update deploy")
-    if utils.is_file(inno_update_file):
-      ret = s3_upload([inno_update_file], "desktop/win/inno/")
-    elif utils.is_file(inno_file):
-      ret = s3_upload([inno_file], "desktop/win/inno/" + inno_update_file)
-    else:
-      ret = False
-    utils.set_summary("desktop inno update deploy", ret)
+    utils.set_summary("desktop inno " + edition + " deploy", ret)
   return
 
-def make_advinst():
-  if not common.platform in ["windows_x64", "windows_x86"]:
-    return
-  advinst_file = "%s-%s-%s.msi" % (package_name, package_version, suffix)
+def make_advinst(edition = "opensource"):
+  if edition == "commercial": advinst_file = "%s-Enterprise-%s-%s.msi"
+  else:                       advinst_file = "%s-%s-%s.msi"
+  advinst_file = "advinst\\" + advinst_file % (package_name, package_version, arch)
   args = [
     "-Version", package_version,
-    "-Arch", arch
+    "-Arch", arch,
+    "-Target", edition
   ]
   if common.sign:
     args += ["-Sign"]
 
-  utils.log_h2("desktop advinst build")
+  utils.log_h2("desktop advinst " + edition + " build")
   ret = utils.ps1("make_advinst.ps1", args, verbose=True)
-  utils.set_summary("desktop advinst build", ret)
+  utils.set_summary("desktop advinst " + edition + " build", ret)
 
   if common.deploy and ret:
-    utils.log_h2("desktop advinst deploy")
+    utils.log_h2("desktop advinst " + edition + " deploy")
     ret = s3_upload([advinst_file], "desktop/win/advinst/")
-    utils.set_summary("desktop advinst deploy", ret)
-  return
-
-def make_online():
-  if not common.platform in ["windows_x86_xp"]:
-    return
-  online_file = "%s-%s-%s.exe" % ("OnlineInstaller", package_version, suffix)
-  ret = utils.is_file(online_file)
-  utils.set_summary("desktop online installer build", ret)
-
-  if common.deploy and ret:
-    utils.log_h2("desktop online installer deploy")
-    ret = s3_upload([online_file], "desktop/win/online/")
-    utils.set_summary("desktop online installer deploy", ret)
+    utils.set_summary("desktop advinst " + edition + " deploy", ret)
   return
 
 #
@@ -193,7 +168,7 @@ def make_online():
 
 def make_macos():
   global package_name, build_dir, branding_dir, updates_dir, changes_dir, \
-    suffix, lane, scheme, released_updates_dir
+    suffix, lane, scheme, source_dir, released_updates_dir
   package_name = branding.desktop_package_name
   build_dir = branding.desktop_build_dir
   branding_dir = branding.desktop_branding_dir
@@ -258,32 +233,34 @@ def make_macos():
   dmg = make_dmg()
   if dmg and sparkle_updates:
     make_sparkle_updates()
+  if common.platform != "darwin_x86_64_v8":
+    make_dmg("commercial")
 
   utils.set_cwd(common.workspace_dir)
   return
 
-def make_dmg():
-  utils.log_h2("desktop dmg build")
-  utils.log_h3(scheme)
+def make_dmg(target = "opensource"):
+  utils.log_h2("desktop dmg " + target + " build")
   utils.log_h3("build/" + package_name + ".app")
-  dmg = utils.sh(
-      "bundler exec fastlane " + lane + " skip_git_bump:true",
-      verbose=True
-  )
-  utils.set_summary("desktop dmg build", dmg)
+  args = ["bundler", "exec", "fastlane", lane, "skip_git_bump:true"]
+  if target == "commercial":
+    args += ["edition:Enterprise"]
+  dmg = utils.sh(" ".join(args), verbose=True)
+  utils.set_summary("desktop dmg " + target + " build", dmg)
 
   if common.deploy and dmg:
-    utils.log_h2("desktop dmg deploy")
+    utils.log_h2("desktop dmg " + target + " deploy")
     ret = s3_upload(
       utils.glob_path("build/*.dmg"),
       "desktop/mac/%s/%s/%s/" % (suffix, common.version, common.build))
     utils.set_summary("desktop dmg deploy", ret)
 
-    utils.log_h2("desktop zip deploy")
+  if common.deploy and dmg and target != "commercial":
+    utils.log_h2("desktop zip " + target + " deploy")
     ret = s3_upload(
       ["build/%s-%s.zip" % (scheme, common.version)],
       "desktop/mac/%s/%s/%s/" % (suffix, common.version, common.build))
-    utils.set_summary("desktop zip deploy", ret)
+    utils.set_summary("desktop zip " + target + " deploy", ret)
   return dmg
 
 def make_sparkle_updates():
@@ -331,22 +308,30 @@ def make_sparkle_updates():
 #
 
 def make_linux():
-  utils.set_cwd("desktop-apps/win-linux/package/linux")
+  utils.set_cwd("desktop-apps/package")
 
-  utils.log_h2("desktop build")
-  make_args = [t["make"] for t in branding.desktop_make_targets]
-  if common.platform == "linux_aarch64":
-    make_args += ["-e", "UNAME_M=aarch64"]
-  if not branding.onlyoffice:
-    make_args += ["-e", "BRANDING_DIR=../../../../" + common.branding + "/desktop-apps/win-linux/package/linux"]
-  ret = utils.sh("make clean && make " + " ".join(make_args), verbose=True)
-  utils.set_summary("desktop build", ret)
+  for edition in ["opensource", "commercial"]:
+    utils.log_h2("desktop " + edition + " build")
+    make_args = [t["make"] for t in branding.desktop_make_targets]
+    if edition == "commercial":
+      make_args.append("PACKAGE_EDITION=commercial")
+    if common.platform == "linux_aarch64":
+      make_args.append("UNAME_M=aarch64")
+    if not branding.onlyoffice:
+      make_args.append("BRANDING_DIR=../../" + common.branding + "/desktop-apps/package")
+    ret = utils.sh("make clean && make " + " ".join(make_args), verbose=True)
+    utils.set_summary("desktop " + edition + " build", ret)
 
-  if common.deploy:
-    for t in branding.desktop_make_targets:
-      utils.log_h2("desktop " + t["make"] + " deploy")
-      ret = s3_upload(utils.glob_path(t["src"]), t["dst"])
-      utils.set_summary("desktop " + t["make"] + " deploy", ret)
+    if common.deploy:
+      for t in branding.desktop_make_targets:
+        utils.log_h2("desktop " + edition + " " + t["make"] + " deploy")
+        uploads = []
+        for f in utils.glob_path(t["src"]):
+          if "help" in f and not \
+            ("x86_64" in common.platform and edition == "opensource"): continue
+          uploads.append(f)
+        ret = s3_upload(uploads, t["dst"])
+        utils.set_summary("desktop " + edition + " " + t["make"] + " deploy", ret)
 
   utils.set_cwd(common.workspace_dir)
   return
